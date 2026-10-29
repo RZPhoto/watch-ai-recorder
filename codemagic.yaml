@@ -1,0 +1,44 @@
+# Codemagic 云构建配置（M0/M1：未签名 ipa）
+# 说明：此阶段没有付费开发者账号，构建出"未签名 ipa"，
+# 由 Windows 上的 AltServer 用用户自己的免费 Apple ID 重签安装。
+workflows:
+  ios-unsigned:
+    name: iOS Unsigned Build
+    max_build_duration: 30
+    environment:
+      xcode: latest
+      vars:
+        APP_NAME: PhoneApp
+    scripts:
+      - name: Install XcodeGen
+        script: |
+          which xcodegen || brew install xcodegen
+      - name: Generate Xcode project
+        script: |
+          cd $CM_BUILD_DIR
+          xcodegen generate
+      - name: Build unsigned app
+        script: |
+          cd $CM_BUILD_DIR
+          xcodebuild \
+            -project WatchAIRecorder.xcodeproj \
+            -scheme PhoneApp \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build | xcpretty
+      - name: Package unsigned ipa
+        script: |
+          cd $CM_BUILD_DIR
+          mkdir -p artifacts Payload
+          APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -type d -name "PhoneApp.app" -path "*Release-iphoneos*" | head -1)
+          echo "Found app at: $APP_PATH"
+          cp -R "$APP_PATH" Payload/
+          zip -qry artifacts/PhoneApp-unsigned.ipa Payload
+          rm -rf Payload
+          ls -la artifacts/
+    artifacts:
+      - artifacts/*.ipa

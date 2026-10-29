@@ -1,0 +1,30 @@
+# XcodeGen 工程定义（M0/M1 阶段：仅 iOS target）
+name: WatchAIRecorder
+options:
+  bundleIdPrefix: com.watchairecorder
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+targets:
+  PhoneApp:
+    type: application
+    platform: iOS
+    sources:
+      - PhoneApp
+    info:
+      path: PhoneApp/Info.plist
+      properties:
+        CFBundleDisplayName: 录音助手
+        UILaunchScreen: {}
+        NSMicrophoneUsageDescription: 仅在你主动开始录音或使用转写功能时使用麦克风，数据只保存在你的设备上。
+        NSSpeechRecognitionUsageDescription: 用于将录音转换为文字，优先在本机完成识别。
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.watchairecorder.phone
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.10"
+        TARGETED_DEVICE_FAMILY: "1"

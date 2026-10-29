@@ -1,0 +1,9 @@
+# XcodeGen 生成的工程文件不入库
+*.xcodeproj
+DerivedData/
+build/
+artifacts/
+Payload/
+*.ipa
+.DS_Store
+xcuserdata/
