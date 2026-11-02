@@ -1,0 +1,23 @@
+# 工作日志
+
+## 2026-11-02（Windows 机器）
+
+### 已完成
+- 用 v0.1（Codemagic 构建 + AltStore 侧载）在 iPhone 16 上完成 M1 初步验证：转写链路通，但 40 秒录音只识别出最后 14 个字（"之后请小王把会议纪要发给全体成员"）——苹果语音识别单次请求约 1 分钟上限 + on-device 文件转写截断 bug
+- 修复 1（7268be8）：免费 Apple ID 签名拒绝中文 App 显示名。project.yml 的 CFBundleDisplayName 由「录音助手」改为 Recorder
+- 修复 2（d8ef03c，v0.2.0）：
+  - TranscriptionService 长音频自动分段（>45s 切成 45s 段逐段转写拼接）
+  - 疑似截断自动复检：结果字数远低于时长应有字数时，自动改用苹果服务器识别重跑，取更完整结果
+  - 日志新增「音频时长 X 秒」输出
+- 两个提交均已推送到 origin/main
+
+### 待办（下次继续）
+1. Codemagic 重新 Start build（ios-unsigned 工作流）→ 下载新 ipa → AltServer Shift+左键 Sideload 覆盖安装
+2. 用「新录音 6.m4a」复测：看日志里音频时长和最终字数，验证分段转写修复
+3. M1 通过后进入下一阶段讨论：App 内录音、AI 总结（需接 LLM API）、历史记录持久化、手表端
+
+### 已知坑（跨机器通用）
+- AltServer（Windows）右键没有 Sideload .ipa，需 **Shift+左键**点托盘图标
+- 免费签名 7 天过期，手机电脑同 Wi-Fi 打开 AltStore 点 Refresh 续签
+- 只支持 m4a 导入；微信语音 amr/silk 未支持
+- objc_setAssociatedObject 用字符串字面量当 key，建议换 static 变量（未改）
