@@ -19,7 +19,7 @@ struct HomeView: View {
                 } header: {
                     Text("手表 AI 录音助手")
                 } footer: {
-                    Text("v0.1 · M1 阶段：验证音频转写链路")
+                    Text("v0.2 · M1 阶段：支持长音频分段转写")
                 }
             }
             .navigationTitle("录音助手")
