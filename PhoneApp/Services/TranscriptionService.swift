@@ -198,6 +198,10 @@ final class TranscriptionService {
         request.shouldReportPartialResults = true
         request.requiresOnDeviceRecognition = onDevice
         request.taskHint = .dictation
+        // 自动加标点：默认关闭，不开的话转写结果是一整串没有断句的汉字
+        request.addsPunctuation = true
+        // 会议场景常用词，减少"纪要""待办"这类词的识别偏差
+        request.contextualStrings = ["会议纪要", "待办事项", "项目沟通会", "转写", "录音", "预算"]
 
         let bridge = RecognitionBridge()
         let label = onDevice ? "本机" : "服务器"
