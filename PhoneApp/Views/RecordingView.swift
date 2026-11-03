@@ -85,6 +85,12 @@ struct RecordingView: View {
 
             levelMeter
 
+            if recorder.isTooQuiet {
+                Label("声音偏小，建议把手机移近发言人", systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
+
             HStack(spacing: 16) {
                 Button {
                     recorder.isPaused ? recorder.resume() : recorder.pause()

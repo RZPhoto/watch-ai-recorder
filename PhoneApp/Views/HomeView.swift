@@ -24,7 +24,7 @@ struct HomeView: View {
                 } header: {
                     Text("手表 AI 录音助手")
                 } footer: {
-                    Text("v0.5 · 现场录音 + 分段转写 + AI 纪要")
+                    Text("v0.5.1 · 现场录音 + 分段转写 + AI 纪要")
                 }
             }
             .navigationTitle("录音助手")

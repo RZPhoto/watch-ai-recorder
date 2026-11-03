@@ -9,6 +9,8 @@ final class RecorderService: NSObject, ObservableObject, AVAudioRecorderDelegate
     @Published private(set) var elapsed: TimeInterval = 0
     /// 归一化音量 0~1，驱动界面电平条
     @Published private(set) var level: Double = 0
+    /// 平滑平均音量（EMA），用于判断"整体声音是否偏小"
+    @Published private(set) var averageLevel: Double = 0
 
     private var recorder: AVAudioRecorder?
     private var timer: Timer?
@@ -59,7 +61,7 @@ final class RecorderService: NSObject, ObservableObject, AVAudioRecorderDelegate
             AVFormatIDKey: kAudioFormatMPEG4AAC,
             AVSampleRateKey: 44100,
             AVNumberOfChannelsKey: 1,
-            AVEncoderBitRateKey: 64000,
+            AVEncoderBitRateKey: 96000,
             AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue
         ]
         let newRecorder = try AVAudioRecorder(url: url, settings: settings)
@@ -123,6 +125,11 @@ final class RecorderService: NSObject, ObservableObject, AVAudioRecorderDelegate
         fileURL = nil
     }
 
+    /// 录音超过 4 秒且整体音量偏低：提示用户把手机移近发言人
+    var isTooQuiet: Bool {
+        isRecording && !isPaused && elapsed > 4 && averageLevel < 0.18
+    }
+
     // MARK: - AVAudioRecorderDelegate
 
     func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
@@ -139,6 +146,7 @@ final class RecorderService: NSObject, ObservableObject, AVAudioRecorderDelegate
             r.updateMeters()
             let db = r.averagePower(forChannel: 0)
             self.level = min(max((Double(db) + 50) / 50, 0), 1)
+            self.averageLevel = self.averageLevel * 0.95 + self.level * 0.05
             self.elapsed = r.currentTime
         }
     }

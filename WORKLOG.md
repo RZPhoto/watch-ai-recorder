@@ -2,6 +2,13 @@
 
 ## 2026-11-03（Windows 机器）
 
+### v0.5.1：多人会议室 / 低质量录音应对
+- 场景：会议室多人讨论、远场拾音，转写与纪要质量都会下降。分三层处理：
+  - 硬件层（用户操作，收益最大）：手机放会议桌中央、距主要发言人 ≤2 米；最佳升级是蓝牙会议音箱（自带多麦波束成形与回声消除），App 已开 allowBluetooth 直连可用
+  - 录音层：`RecorderService` 新增 `averageLevel`（EMA 平滑）与 `isTooQuiet`（>4s 且均量 <0.18），RecordingView 实时提示「声音偏小，建议把手机移近发言人」；AAC 码率 64→96kbps 给噪声环境留余量
+  - 纪要层：SummaryService 提示词增加多人会议规则——容忍打断/抢话/口头语/重复、同话题合并、忽略语气词；听不清的数字/金额/人名/日期保留原文并标注「（原文听不清）」，禁止编造
+- 已知限制：苹果语音识别无说话人分离（diarization），多人抢话时无法标注"谁说的"；远场混响是所有 ASR 共同短板，物理收音改善远大于软件处理
+
 ### M2 第二步：App 内现场录音（v0.5.0，真机验证 v0.4.2 后开工）
 - 新增 `Services/RecorderService.swift`：AVAudioRecorder 输出 AAC m4a（44.1kHz 单声道 64kbps），文件按 `yyyyMMdd-HHmmss` 命名存 `Documents/Recordings`（为历史记录功能留数据）；0.2s 计时器驱动 `elapsed` 与归一化电平 `level`；支持 暂停/继续/放弃（放弃即删文件）；`requestMicPermission` 处理权限三态
 - 新增 `Views/RecordingView.swift`：状态机 idle→recording→transcribing→done；LED 风格 24 格电平条、monospaced 计时；录音期间 `isIdleTimerDisabled` 保持屏幕常亮；停止后不足 1 秒直接丢弃；停止即自动调 TranscriptionService 转写，成功后进入现有 SummaryView 出纪要；离开页面自动放弃未停止的录音；转写失败提示可用「导入音频转写」重试（文件仍在）
