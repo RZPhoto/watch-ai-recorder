@@ -2,6 +2,17 @@
 
 ## 2026-11-03（Windows 机器）
 
+### M1 验收通过（20:14 真机日志）
+- 45.8 秒录音 → 切 2 段（0–30s / 30–45s）→ 服务器识别 100 字 + 43 字 → 合计 143 字，每段 <1 秒
+- 截断问题解决，转写主链路可用
+
+### M2 第一步：AI 会议纪要（v0.4.0，DeepSeek）
+- 新增 `Utils/KeychainStore.swift`：API Key 存钥匙串（不落 UserDefaults）
+- 新增 `Services/SummaryService.swift`：调用 `https://api.deepseek.com/chat/completions`（deepseek-chat，temperature 0.2，response_format=json_object），要求模型输出 `{title, summary, keyPoints[], todos[]}`；解析做三级容错（去 ```json 包裹 → 截取首尾大括号 → 解码失败则原文兜底）；错误按 401/402/429 给中文提示；`verifyKey` 走 `/models` 校验，不消耗 token
+- 新增 `Views/SummaryView.swift`：标题/概述/要点/待办分区展示，底部生成按钮，支持复制 Markdown、ShareLink 分享
+- 新增 `Views/AISettingsView.swift`：填写/保存/校验/删除 Key，附成本说明
+- 改动：TranscribeTestView 转写完成后出现「生成会议纪要」入口；SettingsView 顶部加 AI 设置入口；版本 0.4.0
+
 ### 修正：转写服务放错位置 + 编译错误
 - 远端 `1a21265` 在**仓库根目录**上传了新版 `TranscriptionService.swift`（v0.2.1 策略：服务器优先 / 30s 分段 / 每段截断复检），但 `project.yml` 的 sources 只包含 `PhoneApp`，根目录文件**不参与编译**；且其中 `objc_setAssociatedObject(request, NSObject(), ...)` 的 key 类型错误，编译必失败
 - 已在 `cf6b5e1` 中修正：

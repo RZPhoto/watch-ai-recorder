@@ -38,6 +38,14 @@ struct TranscribeTestView: View {
                         .textSelection(.enabled)
                         .padding()
                 }
+                NavigationLink {
+                    SummaryView(transcript: transcript)
+                } label: {
+                    Label("生成会议纪要", systemImage: "sparkles")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
             } else if !isTranscribing {
                 ContentUnavailableView(
                     "暂无转写结果",

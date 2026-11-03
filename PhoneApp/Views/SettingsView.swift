@@ -7,6 +7,20 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            NavigationLink {
+                AISettingsView()
+            } label: {
+                HStack {
+                    Label("AI 总结设置（DeepSeek）", systemImage: "sparkles")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+            }
+            Divider()
+
             ScrollView {
                 Text(logText)
                     .font(.system(size: 11, design: .monospaced))
