@@ -6,10 +6,12 @@ struct MeetingSummary: Decodable {
     let summary: String
     let keyPoints: [String]
     let todos: [String]
+    /// 校对后的全文（补标点、修错字）；模型未返回时为 nil
+    let cleanTranscript: String?
 
     /// 网络或解析异常时的兜底展示（把模型原文放进 summary）
     static func plain(_ text: String) -> MeetingSummary {
-        MeetingSummary(title: "会议纪要", summary: text, keyPoints: [], todos: [])
+        MeetingSummary(title: "会议纪要", summary: text, keyPoints: [], todos: [], cleanTranscript: nil)
     }
 
     /// 拼成可直接分享的 Markdown 文本
@@ -24,6 +26,11 @@ struct MeetingSummary: Decodable {
             lines.append("")
             lines.append("## 待办")
             lines.append(contentsOf: todos.map { "- [ ] \($0)" })
+        }
+        if let cleanTranscript, !cleanTranscript.isEmpty {
+            lines.append("")
+            lines.append("## 会议全文")
+            lines.append(cleanTranscript)
         }
         return lines.joined(separator: "\n")
     }
@@ -67,22 +74,27 @@ final class SummaryService {
     private let model = "deepseek-chat"
 
     private static let systemPrompt = """
-    你是中文会议纪要助手。用户会给你一段会议录音的自动转写文本，可能有错别字、断句错误、缺少标点。
+    你是中文会议纪要助手。用户会给你一段会议录音的自动转写文本，可能有错别字、缺标点、断句错误。
 
-    请完成：纠正明显的识别错误，然后整理成结构化纪要。
+    请完成三件事：
+    1. 校对全文：补全标点、正确分句、修正明显的语音识别错字（例如把"整理成绩"改成"整理成纪要"），保留原意，不删减实质内容
+    2. 整理成结构化纪要
+    3. 提取待办事项
 
     只输出一个 JSON 对象，不要输出任何解释文字，不要使用 Markdown 代码块。JSON 结构严格如下：
     {
       "title": "会议标题，不超过 20 字，从内容推断",
       "summary": "两到四句话的总体概述",
-      "keyPoints": ["讨论要点，每条一句话", "3 到 8 条"],
-      "todos": ["待办事项，尽量带上负责人和时间，原文没提到就不写", "没有待办则为空数组"]
+      "keyPoints": ["讨论要点，每条一句话，3 到 8 条"],
+      "todos": ["待办事项，带负责人和时间（原文提到才写）"],
+      "cleanTranscript": "校对后的完整文字，保留全部内容，只补标点和改错字"
     }
 
     要求：
     - 全部使用简体中文
     - 不要编造原文没有的信息，不确定的内容宁可不写
-    - todos 必须是可以执行的具体动作，不要把讨论过程当成待办
+    - todos 必须是可以执行的具体动作：凡是原文提到、有明确交付物或时间节点的事项都要列进去（包括规划要做的工作），不要把讨论过程和背景描述当成待办
+    - 同一件事合并成一条，不要拆成多条重复项
     """
 
     /// 生成会议纪要

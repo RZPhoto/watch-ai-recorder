@@ -8,6 +8,7 @@ struct SummaryView: View {
     @State private var isGenerating = false
     @State private var errorMessage: String?
     @State private var copied = false
+    @State private var copiedTranscript = false
 
     var body: some View {
         List {
@@ -70,11 +71,37 @@ struct SummaryView: View {
                 }
             }
 
-            Section("转写原文（\(transcript.count) 字）") {
-                Text(transcript)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
+            if let cleaned = summary?.cleanTranscript, !cleaned.isEmpty {
+                Section {
+                    Text(cleaned)
+                        .font(.footnote)
+                        .textSelection(.enabled)
+
+                    Button {
+                        UIPasteboard.general.string = cleaned
+                        copiedTranscript = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copiedTranscript = false }
+                    } label: {
+                        Label(copiedTranscript ? "已复制" : "复制校对后文字",
+                              systemImage: copiedTranscript ? "checkmark" : "doc.on.doc")
+                    }
+
+                    DisclosureGroup("查看原始转写（\(transcript.count) 字，未校对）") {
+                        Text(transcript)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                } header: {
+                    Text("校对后全文")
+                }
+            } else {
+                Section("转写原文（\(transcript.count) 字）") {
+                    Text(transcript)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
             }
         }
         .navigationTitle("会议纪要")

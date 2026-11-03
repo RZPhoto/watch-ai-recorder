@@ -19,7 +19,7 @@ struct HomeView: View {
                 } header: {
                     Text("手表 AI 录音助手")
                 } footer: {
-                    Text("v0.4 · 转写 + AI 会议纪要（DeepSeek）")
+                    Text("v0.4.2 · 转写 + AI 纪要 + 全文校对")
                 }
             }
             .navigationTitle("录音助手")
