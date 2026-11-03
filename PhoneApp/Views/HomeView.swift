@@ -7,9 +7,14 @@ struct HomeView: View {
             List {
                 Section {
                     NavigationLink {
+                        RecordingView()
+                    } label: {
+                        Label("现场录音", systemImage: "mic.circle.fill")
+                    }
+                    NavigationLink {
                         TranscribeTestView()
                     } label: {
-                        Label("录音转写", systemImage: "waveform")
+                        Label("导入音频转写", systemImage: "waveform")
                     }
                     NavigationLink {
                         SettingsView()
@@ -19,7 +24,7 @@ struct HomeView: View {
                 } header: {
                     Text("手表 AI 录音助手")
                 } footer: {
-                    Text("v0.4.2 · 转写 + AI 纪要 + 全文校对")
+                    Text("v0.5 · 现场录音 + 分段转写 + AI 纪要")
                 }
             }
             .navigationTitle("录音助手")

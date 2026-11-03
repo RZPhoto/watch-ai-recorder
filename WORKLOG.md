@@ -2,6 +2,12 @@
 
 ## 2026-11-03（Windows 机器）
 
+### M2 第二步：App 内现场录音（v0.5.0，真机验证 v0.4.2 后开工）
+- 新增 `Services/RecorderService.swift`：AVAudioRecorder 输出 AAC m4a（44.1kHz 单声道 64kbps），文件按 `yyyyMMdd-HHmmss` 命名存 `Documents/Recordings`（为历史记录功能留数据）；0.2s 计时器驱动 `elapsed` 与归一化电平 `level`；支持 暂停/继续/放弃（放弃即删文件）；`requestMicPermission` 处理权限三态
+- 新增 `Views/RecordingView.swift`：状态机 idle→recording→transcribing→done；LED 风格 24 格电平条、monospaced 计时；录音期间 `isIdleTimerDisabled` 保持屏幕常亮；停止后不足 1 秒直接丢弃；停止即自动调 TranscriptionService 转写，成功后进入现有 SummaryView 出纪要；离开页面自动放弃未停止的录音；转写失败提示可用「导入音频转写」重试（文件仍在）
+- HomeView：新增「现场录音」入口，原「录音转写」改名「导入音频转写」
+- 工程无需改 sources（XcodeGen 自动收集 PhoneApp 下新文件）
+
 ### v0.4.2 验收通过（20:52 真机日志）—— M2 总结功能收工
 - 同一条 45.8s 录音：转写 148 字 → DeepSeek 3 秒 → 6 条要点、5 条待办
 - 待办规则修复生效：上版只有 2 条，本版含季度三项工作共 5 条，每条带时间节点
