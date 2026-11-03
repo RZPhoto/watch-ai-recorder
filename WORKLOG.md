@@ -2,6 +2,12 @@
 
 ## 2026-11-03（Windows 机器）
 
+### v0.5.2：锁屏/后台持续录音 + 系统中断自动恢复
+- `project.yml` 增加 `UIBackgroundModes: [audio]`（后台音频是 Info.plist 声明而非 entitlement，免费 Apple ID 签名即可用，AltStore 侧载不受影响）
+- `RecorderService` 注册 `AVAudioSession.interruptionNotification`：来电/闹钟/Siri 中断 → 自动暂停并记录 `wasInterruptedBySystem`；中断结束且系统 `shouldResume` → 自动继续录音，否则保持暂停并写日志；deinit 移除观察者
+- 界面提示改为「锁屏或切到后台都会继续录音」
+- 注意：锁屏时计时/电平条不刷新属正常（后台仍在录音），解锁回 App 恢复显示
+
 ### v0.5.1：多人会议室 / 低质量录音应对
 - 场景：会议室多人讨论、远场拾音，转写与纪要质量都会下降。分三层处理：
   - 硬件层（用户操作，收益最大）：手机放会议桌中央、距主要发言人 ≤2 米；最佳升级是蓝牙会议音箱（自带多麦波束成形与回声消除），App 已开 allowBluetooth 直连可用

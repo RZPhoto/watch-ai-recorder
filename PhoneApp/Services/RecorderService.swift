@@ -14,7 +14,57 @@ final class RecorderService: NSObject, ObservableObject, AVAudioRecorderDelegate
 
     private var recorder: AVAudioRecorder?
     private var timer: Timer?
+    private var interruptionToken: NSObjectProtocol?
+    /// 录音被系统（来电/闹钟）中断过，结束时视情况自动恢复
+    private var wasInterruptedBySystem = false
     private(set) var fileURL: URL?
+
+    override init() {
+        super.init()
+        interruptionToken = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] note in
+            self?.handleInterruption(note)
+        }
+    }
+
+    deinit {
+        if let token = interruptionToken {
+            NotificationCenter.default.removeObserver(token)
+        }
+    }
+
+    /// 来电/闹钟等系统中断：自动暂停；中断结束且系统允许时自动继续
+    private func handleInterruption(_ note: Notification) {
+        guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+
+        switch type {
+        case .began:
+            if isRecording && !isPaused {
+                wasInterruptedBySystem = true
+                recorder?.pause()
+                isPaused = true
+                level = 0
+                AppLogger.log("录音被系统中断（来电/闹钟/Siri），已自动暂停")
+            }
+        case .ended:
+            guard wasInterruptedBySystem else { return }
+            wasInterruptedBySystem = false
+            let optionsRaw = note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+            if AVAudioSession.InterruptionOptions(rawValue: optionsRaw).contains(.shouldResume) {
+                recorder?.record()
+                isPaused = false
+                AppLogger.log("中断结束，已自动继续录音")
+            } else {
+                AppLogger.log("中断结束，但系统不允许自动恢复，录音保持暂停")
+            }
+        @unknown default:
+            break
+        }
+    }
 
     /// 录音保存目录（Documents/Recordings）
     static let recordingsDirectory: URL = {

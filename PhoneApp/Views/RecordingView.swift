@@ -70,7 +70,7 @@ struct RecordingView: View {
             }
             .buttonStyle(.borderedProminent)
 
-            Text("录音保存在手机本地，停止后自动转写")
+            Text("锁屏或切到后台都会继续录音，停止后自动转写")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
