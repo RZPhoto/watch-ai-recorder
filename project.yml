@@ -18,7 +18,7 @@ targets:
         CFBundleDisplayName: Recorder
         UILaunchScreen: {}
         NSMicrophoneUsageDescription: 仅在你主动开始录音或使用转写功能时使用麦克风，数据只保存在你的设备上。
-        NSSpeechRecognitionUsageDescription: 用于将录音转换为文字，优先在本机完成识别。
+        NSSpeechRecognitionUsageDescription: 用于将录音转换为文字，默认使用苹果语音识别服务，离线时在本机完成识别。
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
     settings:

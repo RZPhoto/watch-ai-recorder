@@ -20,14 +20,21 @@ enum TranscribeError: LocalizedError {
 }
 
 /// 转写服务：把 m4a 音频文件转写为中文文本。
-/// 优先本机识别（requiresOnDeviceRecognition），失败或疑似截断时回退到苹果服务器识别。
-/// 超过 45 秒的音频自动切分逐段转写，规避苹果单次识别请求约 1 分钟的上限。
+///
+/// 策略（v0.3.1）：
+/// - 苹果服务器识别优先（本机识别对文件转写有截断 bug），失败/离线时回退本机识别
+/// - 超过 30 秒的音频切分逐段转写，规避苹果单次请求约 1 分钟上限
+/// - 每段结果做截断复检：字数远低于时长应有字数时换引擎重跑，取更完整结果
+/// - 跳过 <1 秒的碎片段；单段失败只跳过不中断整体
+/// - 单次识别带超时保护，避免回调不触发时界面永久卡住
 final class TranscriptionService {
     static let shared = TranscriptionService()
 
-    /// 单段最大时长（秒）。苹果单次识别约 1 分钟上限，留出余量。
-    private static let chunkSeconds: Double = 45
-    /// 中文正常语速约每秒 3~4 字；结果字数低于 时长×该系数 时视为疑似截断。
+    /// 单段最大时长（秒）
+    private static let chunkSeconds: Double = 30
+    /// 低于该时长的碎片段直接跳过
+    private static let minSegmentSeconds: Double = 1.0
+    /// 中文正常语速约每秒 3~4 字；结果字数低于 时长×该系数 时视为疑似截断
     private static let minCharsPerSecond: Double = 1.5
 
     // MARK: - 权限
@@ -46,13 +53,10 @@ final class TranscriptionService {
         guard micGranted else { throw TranscribeError.micNotAuthorized }
     }
 
-    // MARK: - 转写
+    // MARK: - 对外接口
 
     /// 转写一个音频文件，返回全文文本
-    /// - Parameters:
-    ///   - url: 音频文件地址（需可读，security-scoped 的文件请先拷贝到沙盒临时目录）
-    ///   - forceOnline: 强制使用苹果服务器识别（默认 false，优先本机）
-    func transcribe(url: URL, forceOnline: Bool = false) async throws -> String {
+    func transcribe(url: URL) async throws -> String {
         try await requestPermissions()
 
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN")),
@@ -64,59 +68,82 @@ final class TranscriptionService {
         let duration = try await asset.load(.duration).seconds
         AppLogger.log("音频时长 \(String(format: "%.1f", duration)) 秒，文件 \(url.lastPathComponent)")
 
-        let onDevice = forceOnline ? false : (recognizer.supportsOnDeviceRecognition == true)
-
         if duration <= Self.chunkSeconds {
-            AppLogger.log("单段转写，本机识别: \(onDevice)")
-            let text = try await recognizeWithFallback(recognizer: recognizer, url: url, onDevice: onDevice)
-
-            // 疑似截断复检：本机识别结果字数远低于该时长应有的字数时，改用服务器识别再试一次
-            if !forceOnline, onDevice, Double(text.count) < duration * Self.minCharsPerSecond {
-                AppLogger.log("结果仅 \(text.count) 字，疑似被截断，改用服务器识别复检")
-                if let retry = try? await runRecognition(recognizer: recognizer, url: url, onDevice: false),
-                   retry.count > text.count {
-                    AppLogger.log("服务器识别更完整（\(retry.count) 字），采用该结果")
-                    return retry
-                }
-            }
-            AppLogger.log("转写完成，共 \(text.count) 字")
-            return text
+            return try await transcribeSegment(recognizer: recognizer, url: url, length: duration)
         }
 
-        // 长音频：切分为多段，逐段转写后拼接
+        // 长音频：切分为多段，逐段转写后拼接；单段失败跳过不中断
         let segmentCount = Int((duration / Self.chunkSeconds).rounded(.up))
-        AppLogger.log("长音频切分为 \(segmentCount) 段，本机识别: \(onDevice)")
+        AppLogger.log("长音频切分为 \(segmentCount) 段（服务器识别优先）")
         var parts: [String] = []
         for index in 0..<segmentCount {
             let start = Double(index) * Self.chunkSeconds
             let end = min(start + Self.chunkSeconds, duration)
+            let length = end - start
+            guard length >= Self.minSegmentSeconds else {
+                AppLogger.log("第 \(index + 1) 段仅 \(String(format: "%.1f", length)) 秒，跳过")
+                continue
+            }
             let segmentURL = FileManager.default.temporaryDirectory
                 .appendingPathComponent("seg-\(index)-\(UUID().uuidString)")
                 .appendingPathExtension("m4a")
-            try await exportSegment(of: url, from: start, length: end - start, to: segmentURL)
+            do {
+                try await exportSegment(of: url, from: start, length: length, to: segmentURL)
+            } catch {
+                AppLogger.log("第 \(index + 1) 段导出失败，跳过：\(error.localizedDescription)")
+                continue
+            }
             defer { try? FileManager.default.removeItem(at: segmentURL) }
 
             AppLogger.log("转写第 \(index + 1)/\(segmentCount) 段（\(Int(start))s–\(Int(end))s）")
-            let text = try await recognizeWithFallback(recognizer: recognizer, url: segmentURL, onDevice: onDevice)
-            if !text.isEmpty { parts.append(text) }
+            do {
+                let text = try await transcribeSegment(recognizer: recognizer, url: segmentURL, length: length)
+                if !text.isEmpty { parts.append(text) }
+            } catch {
+                // 单段彻底失败：记录并继续，不拖垮整体
+                AppLogger.log("第 \(index + 1) 段转写失败，跳过：\(error.localizedDescription)")
+            }
         }
         let joined = parts.joined()
         AppLogger.log("分段转写完成，共 \(joined.count) 字")
         return joined
     }
 
-    /// 单段转写：本机识别失败时回退到苹果服务器识别
-    private func recognizeWithFallback(recognizer: SFSpeechRecognizer, url: URL, onDevice: Bool) async throws -> String {
+    // MARK: - 单段转写（含引擎回退与截断复检）
+
+    /// 服务器识别优先；失败回退本机；任一结果疑似截断时换引擎复检，取更完整的
+    private func transcribeSegment(recognizer: SFSpeechRecognizer, url: URL, length: TimeInterval) async throws -> String {
+        let timeout = max(20.0, length * 3 + 10)
+        var text = ""
+
         do {
-            return try await runRecognition(recognizer: recognizer, url: url, onDevice: onDevice)
-        } catch {
-            if onDevice {
-                AppLogger.log("本机识别失败: \(error.localizedDescription)，回退服务器识别")
-                return try await runRecognition(recognizer: recognizer, url: url, onDevice: false)
+            text = try await runRecognition(recognizer: recognizer, url: url, onDevice: false, timeout: timeout)
+            AppLogger.log("服务器识别本段 \(text.count) 字")
+            if Double(text.count) < length * Self.minCharsPerSecond {
+                AppLogger.log("服务器结果偏短，本机识别复检")
+                if let retry = try? await runRecognition(recognizer: recognizer, url: url, onDevice: true, timeout: timeout),
+                   retry.count > text.count {
+                    text = retry
+                    AppLogger.log("复检结果更完整（\(retry.count) 字），采用")
+                }
             }
-            throw error
+        } catch {
+            AppLogger.log("服务器识别失败：\(error.localizedDescription)，回退本机识别")
+            text = try await runRecognition(recognizer: recognizer, url: url, onDevice: true, timeout: timeout)
+            AppLogger.log("本机识别本段 \(text.count) 字")
+            if Double(text.count) < length * Self.minCharsPerSecond {
+                AppLogger.log("本机结果疑似截断，服务器识别复检")
+                if let retry = try? await runRecognition(recognizer: recognizer, url: url, onDevice: false, timeout: timeout),
+                   retry.count > text.count {
+                    text = retry
+                    AppLogger.log("复检结果更完整（\(retry.count) 字），采用")
+                }
+            }
         }
+        return text
     }
+
+    // MARK: - 底层
 
     /// 用 AVAssetExportSession 把音频的指定时间段导出为独立 m4a
     private func exportSegment(of source: URL, from start: Double, length: Double, to destination: URL) async throws {
@@ -142,38 +169,74 @@ final class TranscriptionService {
         }
     }
 
-    private func runRecognition(recognizer: SFSpeechRecognizer, url: URL, onDevice: Bool) async throws -> String {
+    /// 识别任务的持有者：避免用 objc 关联对象，同时保证 task 不被提前释放
+    private final class RecognitionBridge {
+        private let lock = NSLock()
+        private var text = ""
+        private var finished = false
+        var task: SFSpeechRecognitionTask?
+
+        func append(_ value: String) {
+            lock.lock(); defer { lock.unlock() }
+            text = value
+        }
+
+        /// 只允许收尾一次；调用方负责 resume continuation
+        func finishIfNeeded() -> String? {
+            lock.lock(); defer { lock.unlock() }
+            if finished { return nil }
+            finished = true
+            return text
+        }
+    }
+
+    private func runRecognition(recognizer: SFSpeechRecognizer,
+                                url: URL,
+                                onDevice: Bool,
+                                timeout: TimeInterval) async throws -> String {
         let request = SFSpeechURLRecognitionRequest(url: url)
         request.shouldReportPartialResults = true
         request.requiresOnDeviceRecognition = onDevice
         request.taskHint = .dictation
 
+        let bridge = RecognitionBridge()
+        let label = onDevice ? "本机" : "服务器"
+
         return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<String, Error>) in
-            var accumulated = ""
-            var hasResumed = false
-            let task = recognizer.recognitionTask(with: request) { result, error in
-                guard !hasResumed else { return }
+            bridge.task = recognizer.recognitionTask(with: request) { result, error in
                 if let result {
-                    accumulated = result.bestTranscription.formattedString
-                    if result.isFinal {
-                        hasResumed = true
-                        AppLogger.log("单次识别完成，本段 \(accumulated.count) 字")
-                        cont.resume(returning: accumulated)
+                    bridge.append(result.bestTranscription.formattedString)
+                    if result.isFinal, let text = bridge.finishIfNeeded() {
+                        AppLogger.log("单次识别完成（\(label)），\(text.count) 字")
+                        bridge.task = nil
+                        cont.resume(returning: text)
                     }
                 } else if let error {
-                    // 已有部分结果时不要浪费，返回已识别文本
-                    if !accumulated.isEmpty {
-                        hasResumed = true
-                        AppLogger.log("识别中断但有部分结果: \(error.localizedDescription)")
-                        cont.resume(returning: accumulated)
+                    // 有部分结果就先返回，别浪费已识别的文字
+                    if let text = bridge.finishIfNeeded(), !text.isEmpty {
+                        AppLogger.log("识别中断但有部分结果（\(label)）：\(error.localizedDescription)")
+                        bridge.task = nil
+                        cont.resume(returning: text)
                     } else {
-                        hasResumed = true
+                        bridge.task = nil
                         cont.resume(throwing: error)
                     }
                 }
             }
-            // 保留 task 引用防止提前释放
-            objc_setAssociatedObject(request, "task", task, .OBJC_ASSOCIATION_RETAIN)
+
+            // 超时保护：回调一直不来时用已有结果收尾，避免界面永久卡住
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                guard let text = bridge.finishIfNeeded() else { return }
+                bridge.task?.cancel()
+                bridge.task = nil
+                if text.isEmpty {
+                    AppLogger.log("识别超时（\(label)），无结果")
+                    cont.resume(throwing: TranscribeError.recognizerUnavailable)
+                } else {
+                    AppLogger.log("识别超时（\(label)），返回已识别的 \(text.count) 字")
+                    cont.resume(returning: text)
+                }
+            }
         }
     }
 }

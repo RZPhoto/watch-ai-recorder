@@ -1,5 +1,16 @@
 # 工作日志
 
+## 2026-11-03（Windows 机器）
+
+### 修正：转写服务放错位置 + 编译错误
+- 远端 `1a21265` 在**仓库根目录**上传了新版 `TranscriptionService.swift`（v0.2.1 策略：服务器优先 / 30s 分段 / 每段截断复检），但 `project.yml` 的 sources 只包含 `PhoneApp`，根目录文件**不参与编译**；且其中 `objc_setAssociatedObject(request, NSObject(), ...)` 的 key 类型错误，编译必失败
+- 已在 `cf6b5e1` 中修正：
+  - 新版逻辑合并进 `PhoneApp/Services/TranscriptionService.swift`，删除根目录副本
+  - 用内部类 `RecognitionBridge`（NSLock 保护 + 强引用 task）替换 objc 关联对象
+  - 新增识别超时保护（`max(20, length*3+10)` 秒），避免回调不触发时界面卡死
+  - 服务器识别结果偏短时也用本机识别复检，取更完整者
+  - 版本号 0.3.1，更新权限说明与首页版本文案
+
 ## 2026-11-02（Windows 机器）
 
 ### 已完成
