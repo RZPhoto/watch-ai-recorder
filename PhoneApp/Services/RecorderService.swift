@@ -3,7 +3,15 @@ import AVFoundation
 
 /// 现场录音服务：AVAudioRecorder 输出 m4a（AAC），带计时与电平表
 /// 录音文件保存在 Documents/Recordings，为后续历史记录功能留数据
+///
+/// v0.6.1：
+/// - 改为单例，页面销毁不再中断录音（锁屏/返回主页都能继续录）
+/// - 音频会话切到 .voiceChat 模式：系统会对麦克风做自动增益和噪声抑制，
+///   手机放在桌上录会议时远场人声会被明显抬高，这是"听不清、内容缺失"的主因之一
+/// - 采样率 48kHz / 128kbps，给识别引擎更完整的语音信息
 final class RecorderService: NSObject, ObservableObject, AVAudioRecorderDelegate {
+    static let shared = RecorderService()
+
     @Published private(set) var isRecording = false
     @Published private(set) var isPaused = false
     @Published private(set) var elapsed: TimeInterval = 0
@@ -97,7 +105,9 @@ final class RecorderService: NSObject, ObservableObject, AVAudioRecorderDelegate
         guard !isRecording else { return }
 
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .default,
+        // .voiceChat 会启用系统级语音处理（自动增益 + 降噪 + 回声消除），
+        // 远场录音的人声清晰度提升明显；.defaultToSpeaker 避免声音走听筒
+        try session.setCategory(.playAndRecord, mode: .voiceChat,
                                 options: [.defaultToSpeaker, .allowBluetooth])
         try session.setActive(true)
 
@@ -109,10 +119,10 @@ final class RecorderService: NSObject, ObservableObject, AVAudioRecorderDelegate
 
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: 44100,
+            AVSampleRateKey: 48000,
             AVNumberOfChannelsKey: 1,
-            AVEncoderBitRateKey: 96000,
-            AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue
+            AVEncoderBitRateKey: 128000,
+            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
         ]
         let newRecorder = try AVAudioRecorder(url: url, settings: settings)
         newRecorder.isMeteringEnabled = true

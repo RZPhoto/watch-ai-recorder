@@ -1,5 +1,23 @@
 # 工作日志
 
+## 2026-11-04（Windows 机器）
+
+### v0.6.1：转写引擎并发重写 + 后台转写 + App 图标（针对 89 分钟真机测试暴露的 5 个问题）
+
+真机数据：89.4 分钟会议录音 → 179 段串行转写 6 分钟 → 2356 字（正常会议应 1.5 万字上下，缺失严重）→ AI 总结 12 秒出 7 要点 9 待办。
+
+1. **转写太慢** → `TranscriptionService` 重写为 **4 路并发**（`SegmentRun` actor 分发段落，每个 worker 独立创建 SFSpeechRecognizer），只有"极弱结果"（< 时长×0.35 字/秒）才扩窗复检，预计 3~4 倍提速；进度百分比实时回调
+2. **退出页面/锁屏转写中断** → 新增 `TranscriptionJobManager`（@MainActor 单例）：转写任务与视图生命周期解绑；新增 `SilentAudioKeeper` 转写期间循环播放全零采样占住音频会话（mixWithOthers 不打断用户听歌），锁屏可继续跑；每段完成即写断点 JSON 到 `Documents/TranscriptionJobs/`，App 被杀后下次启动主页出现「有未完成的转写（N%）· 继续」入口；完成后由管理器统一创建历史记录（不依赖页面存活）
+3. **内容缺失** → 分段 30s→45s（上下文更完整）；末尾碎片段并入上一段（原来 0.8s 碎片段必失败）；空/极弱结果用前后各扩 4 秒窗口重跑一次捞回边界被切断的语音；完成日志新增覆盖率统计（有效段/总段），用于区分"真静音"与"拾音过弱"
+4. **识别效果差** → 根因主要是远场拾音：录音会话切 `.voiceChat` 模式（系统级自动增益+降噪+回声消除），48kHz/128kbps/high 质量；识别只走苹果服务器（本机识别 v0.3.1 已证实更差，仅网络异常兜底）；contextualStrings 扩充会议词表
+5. **无 App 图标** → 新增 `Assets.xcassets/AppIcon.appiconset`（1024px 扁平风格：紫蓝渐变底+白色圆角波形条，`tools/make_icon.py` 纯标准库生成），project.yml 加 `ASSETCATALOG_COMPILER_APPICON_NAME`
+
+其他：`RecorderService` 改单例（页面销毁不中断录音）；`RecordingView`/`TranscribeTestView`/`HomeView` 接入任务管理器（进度条、取消、续转横幅）；版本 0.6.1 (build 2)。
+
+上传清单：整个 `PhoneApp` 文件夹（含新增 Assets.xcassets、TranscriptionJobManager.swift、SilentAudioKeeper.swift）+ `project.yml`。
+
+待真机验证：① 89 分钟录音转写耗时（预期 <2 分钟）；② 转写中锁屏/退出页面不中断、主页显示进度；③ 断点续转；④ 图标显示。
+
 ## 2026-11-03（Windows 机器）
 
 ### v0.5.2：锁屏/后台持续录音 + 系统中断自动恢复

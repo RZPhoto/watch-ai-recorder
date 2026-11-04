@@ -1,9 +1,13 @@
 import SwiftUI
+import SwiftData
 
 /// 会议纪要页：把转写文本交给 DeepSeek，生成标题 / 概述 / 要点 / 待办
+/// 传入 record 时（v0.6），生成结果会自动存入历史记录
 struct SummaryView: View {
     let transcript: String
+    var record: MeetingRecord?
 
+    @Environment(\.modelContext) private var modelContext
     @State private var summary: MeetingSummary?
     @State private var isGenerating = false
     @State private var errorMessage: String?
@@ -136,6 +140,12 @@ struct SummaryView: View {
 
         do {
             summary = try await SummaryService.shared.summarize(transcript: transcript)
+            // v0.6：写入历史记录
+            if let record {
+                record.apply(summary: summary)
+                try? modelContext.save()
+                AppLogger.log("纪要已存入历史记录：\(record.title)")
+            }
         } catch {
             AppLogger.log("生成纪要失败：\(error.localizedDescription)")
             errorMessage = error.localizedDescription
