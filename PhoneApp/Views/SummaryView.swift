@@ -141,7 +141,7 @@ struct SummaryView: View {
         do {
             summary = try await SummaryService.shared.summarize(transcript: transcript)
             // v0.6：写入历史记录
-            if let record {
+            if let record, let summary {
                 record.apply(summary: summary)
                 try? modelContext.save()
                 AppLogger.log("纪要已存入历史记录：\(record.title)")
