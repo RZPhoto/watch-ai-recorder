@@ -70,7 +70,7 @@ struct HistoryRow: View {
 /// 历史记录详情：回看纪要、重新生成、导出
 struct HistoryDetailView: View {
     @Environment(\.modelContext) private var modelContext
-    @ObservedObject var record: MeetingRecord
+    @Bindable var record: MeetingRecord
 
     @State private var isGenerating = false
     @State private var errorMessage: String?
