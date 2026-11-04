@@ -59,6 +59,12 @@ final class SilentAudioKeeper {
         player = nil
         engine = nil
         isRunning = false
+        // 若此时用户已开新一轮录音，会话正被麦克风占用，
+        // 不能整体 deactivate，否则会把正在进行的录音一起杀掉
+        if RecorderService.shared.isRecording {
+            AppLogger.log("后台保活：已停止引擎（检测到正在录音，音频会话保持不动）")
+            return
+        }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         AppLogger.log("后台保活：已停止")
     }
